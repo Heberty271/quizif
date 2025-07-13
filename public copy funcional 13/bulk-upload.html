@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ferramenta de Inserção de Alunos em Massa</title>
+    <style>
+        :root {
+            --primary-color: #8b5cf6;
+            --bg-dark: #111827;
+            --bg-glass: rgba(31, 41, 55, 0.8);
+            --border-glass: rgba(255, 255, 255, 0.1);
+            --text-light: #f9fafb;
+            --text-dark: #d1d5db;
+            --success-color: #10b981;
+            --error-color: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            margin: 0;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--bg-glass);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass);
+            padding: 2rem;
+            border-radius: 1rem;
+        }
+
+        h1,
+        h2 {
+            color: var(--primary-color);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        textarea,
+        select,
+        input {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 1rem;
+            border: 1px solid var(--border-glass);
+            border-radius: 0.5rem;
+            box-sizing: border-box;
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--text-light);
+            font-family: inherit;
+        }
+
+        textarea {
+            min-height: 200px;
+            font-family: monospace;
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            border: none;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            background-color: var(--primary-color);
+            color: var(--text-light);
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #7c3aed;
+        }
+
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        #log-output {
+            margin-top: 2rem;
+            background-color: #1f2937;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+
+        .log-success {
+            color: var(--success-color);
+        }
+
+        .log-error {
+            color: var(--error-color);
+        }
+
+        .log-info {
+            color: var(--text-dark);
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>Ferramenta de Inserção de Alunos em Massa</h1>
+
+        <!-- Seção de Login -->
+        <div id="login-section">
+            <h2>Login de Professor</h2>
+            <p>Por favor, faça login com a sua conta de professor para usar a ferramenta.</p>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="email">Email de Professor</label>
+                    <input type="email" id="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Senha</label>
+                    <input type="password" id="password" required>
+                </div>
+                <button type="submit">Entrar</button>
+            </form>
+        </div>
+
+        <!-- Ferramenta Principal (escondida por defeito) -->
+        <div id="tool-section" class="hidden">
+            <p>Bem-vindo! Siga os passos abaixo para adicionar os seus alunos.</p>
+            <div class="form-group">
+                <label for="class-selector">1. Selecione a Turma de Destino:</label>
+                <select id="class-selector" class="form-control" disabled>
+                    <option>A carregar turmas...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="student-data">2. Cole os Dados dos Alunos (Matrícula,Nome Completo):</label>
+                <textarea id="student-data"
+                    placeholder="Exemplo:&#10;2024001,João da Silva&#10;2024002,Maria Oliveira&#10;2024003,Pedro Santos"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="email-domain">3. Domínio do Email (ex: @escola.com):</label>
+                <input type="text" id="email-domain" value="@codehoot.com">
+            </div>
+            <button id="process-btn">Inserir Alunos</button>
+            <h2>Registo do Processo</h2>
+            <div id="log-output"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, doc, setDoc, updateDoc, arrayUnion, query, where, getDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+
+        // ===================================================================
+        // PASSO 1: COLOQUE A SUA CONFIGURAÇÃO DO FIREBASE AQUI
+        // ===================================================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyALvWVp38Xy0iwTvXMg5OkWhqiQ8oDXD6E",
+            authDomain: "quizifmuz.firebaseapp.com",
+            databaseURL: "https://quizifmuz-default-rtdb.firebaseio.com",
+            projectId: "quizifmuz",
+            storageBucket: "quizifmuz.firebasestorage.app",
+            messagingSenderId: "621559995106",
+            appId: "1:621559995106:web:9f6039d14fa239e06fdcbb"
+        };
+        // ===================================================================
+
+        const loginSection = document.getElementById('login-section');
+        const toolSection = document.getElementById('tool-section');
+        const loginForm = document.getElementById('login-form');
+        const classSelector = document.getElementById('class-selector');
+        const studentDataInput = document.getElementById('student-data');
+        const emailDomainInput = document.getElementById('email-domain');
+        const processBtn = document.getElementById('process-btn');
+        const logOutput = document.getElementById('log-output');
+
+        let db, auth, teacherId;
+
+        const log = (message, type = 'info') => {
+            logOutput.innerHTML += `<div class="log-${type}">${new Date().toLocaleTimeString()}: ${message}</div>`;
+            logOutput.scrollTop = logOutput.scrollHeight;
+        };
+
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = loginForm.querySelector('#email').value;
+            const password = loginForm.querySelector('#password').value;
+
+            try {
+                log(`A tentar autenticar ${email}...`, 'info');
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+
+                // Verificar se o utilizador é professor
+                const userDocRef = doc(db, 'users', user.uid);
+                const userDocSnap = await getDoc(userDocRef);
+
+                if (userDocSnap.exists() && userDocSnap.data().role === 'teacher') {
+                    teacherId = user.uid;
+                    log(`Login bem-sucedido! Bem-vindo, professor(a).`, 'success');
+                    loginSection.classList.add('hidden');
+                    toolSection.classList.remove('hidden');
+                    await fetchClasses();
+                } else {
+                    log("Acesso negado. Apenas professores podem usar esta ferramenta.", "error");
+                    await signOut(auth);
+                }
+            } catch (error) {
+                log(`Erro no login: ${error.message}`, "error");
+            }
+        });
+
+        async function fetchClasses() {
+            if (!db || !teacherId) return;
+            log("A buscar turmas do professor...", "info");
+            try {
+                const q = query(collection(db, 'classes'), where("teacherId", "==", teacherId));
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty) {
+                    log("Nenhuma turma encontrada para este professor.", "info");
+                    classSelector.innerHTML = '<option>Nenhuma turma encontrada</option>';
+                    return;
+                }
+
+                classSelector.innerHTML = '';
+                querySnapshot.forEach((doc) => {
+                    const classData = doc.data();
+                    const option = document.createElement('option');
+                    option.value = doc.id;
+                    option.textContent = classData.className;
+                    classSelector.appendChild(option);
+                });
+                classSelector.disabled = false;
+                log("Turmas carregadas com sucesso!", "success");
+            } catch (error) {
+                log("Erro ao buscar turmas.", "error");
+                console.error(error);
+            }
+        }
+
+        processBtn.addEventListener('click', async () => {
+            if (!db || !auth) {
+                log("A conexão com o Firebase falhou.", "error");
+                return;
+            }
+
+            const classId = classSelector.value;
+            const studentDataRaw = studentDataInput.value.trim();
+            const emailDomain = emailDomainInput.value;
+
+            if (!classId || !studentDataRaw || !emailDomain) {
+                log("Por favor, preencha todos os campos.", "error");
+                return;
+            }
+
+            processBtn.disabled = true;
+            log("A iniciar o processo de inserção...", "info");
+
+            const students = studentDataRaw.split('\n').filter(line => line.trim() !== '');
+
+            for (const line of students) {
+                const parts = line.split(',');
+                if (parts.length !== 2) {
+                    log(`Linha inválida, pulando: "${line}"`, "error");
+                    continue;
+                }
+
+                const matricula = parts[0].trim();
+                const name = parts[1].trim();
+                const email = `${matricula}${emailDomain}`;
+                const password = matricula;
+
+                try {
+                    log(`A criar utilizador para ${name} (${email})...`, "info");
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    const uid = userCredential.user.uid;
+                    log(`Utilizador criado com UID: ${uid}`, "success");
+
+                    const avatar = `https://api.dicebear.com/8.x/bottts/svg?seed=${encodeURIComponent(name)}`;
+
+                    await setDoc(doc(db, "users", uid), { name, email, role: "student", avatar });
+                    log(`Perfil de ${name} guardado na base de dados.`, "success");
+
+                    const classRef = doc(db, 'classes', classId);
+                    await updateDoc(classRef, {
+                        students: arrayUnion({ uid, name, email })
+                    });
+                    log(`${name} adicionado à turma com sucesso!`, "success");
+
+                } catch (error) {
+                    log(`Erro ao processar ${name}: ${error.message}`, "error");
+                    console.error(error);
+                }
+            }
+
+            log("Processo concluído!", "success");
+            processBtn.disabled = false;
+        });
+
+    </script>
+</body>
+
+</html>

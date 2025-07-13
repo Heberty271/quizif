@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ferramenta de Adição de Questões a um Quiz</title>
+    <style>
+        :root {
+            --primary-color: #8b5cf6;
+            --bg-dark: #111827;
+            --bg-glass: rgba(31, 41, 55, 0.8);
+            --border-glass: rgba(255, 255, 255, 0.1);
+            --text-light: #f9fafb;
+            --text-dark: #d1d5db;
+            --success-color: #10b981;
+            --error-color: #ef4444;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            margin: 0;
+            padding: 2rem;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--bg-glass);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass);
+            padding: 2rem;
+            border-radius: 1rem;
+        }
+        h1, h2 {
+            color: var(--primary-color);
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        textarea, select, input {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 1rem;
+            border: 1px solid var(--border-glass);
+            border-radius: 0.5rem;
+            box-sizing: border-box;
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--text-light);
+            font-family: inherit;
+        }
+        button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            border: none;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            background-color: var(--primary-color);
+            color: var(--text-light);
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #7c3aed;
+        }
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+        #log-output {
+            margin-top: 2rem;
+            background-color: #1f2937;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .log-success { color: var(--success-color); }
+        .log-error { color: var(--error-color); }
+        .log-info { color: var(--text-dark); }
+        .hidden { display: none; }
+        .question-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid var(--border-glass);
+            padding: 1rem;
+            border-radius: 0.5rem;
+        }
+        .question-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+        }
+        .question-item input {
+            width: auto;
+            margin-right: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Ferramenta de Adição de Questões a um Quiz</h1>
+        
+        <div id="login-section">
+            <h2>Login de Professor</h2>
+            <p>Por favor, faça login com a sua conta de professor para usar a ferramenta.</p>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="email">Email de Professor</label>
+                    <input type="email" id="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Senha</label>
+                    <input type="password" id="password" required>
+                </div>
+                <button type="submit">Entrar</button>
+            </form>
+        </div>
+
+        <div id="tool-section" class="hidden">
+            <p>Selecione um quiz e as questões do seu banco que deseja adicionar a ele.</p>
+            
+            <div class="form-group">
+                <label for="quiz-selector">1. Selecione o Quiz de Destino:</label>
+                <select id="quiz-selector" class="form-control" disabled>
+                    <option>A carregar quizzes...</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>2. Selecione as Questões a Adicionar:</label>
+                <div id="question-bank-list" class="question-list">
+                    <p>A carregar questões...</p>
+                </div>
+            </div>
+            
+            <button id="process-btn">Adicionar Questões ao Quiz</button>
+
+            <h2>Registo do Processo</h2>
+            <div id="log-output"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, doc, getDoc, updateDoc, arrayUnion, query, where } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyALvWVp38Xy0iwTvXMg5OkWhqiQ8oDXD6E",
+            authDomain: "quizifmuz.firebaseapp.com",
+            databaseURL: "https://quizifmuz-default-rtdb.firebaseio.com",
+            projectId: "quizifmuz",
+            storageBucket: "quizifmuz.firebasestorage.app",
+            messagingSenderId: "621559995106",
+            appId: "1:621559995106:web:9f6039d14fa239e06fdcbb"
+        };
+
+        const loginSection = document.getElementById('login-section');
+        const toolSection = document.getElementById('tool-section');
+        const loginForm = document.getElementById('login-form');
+        const quizSelector = document.getElementById('quiz-selector');
+        const questionBankList = document.getElementById('question-bank-list');
+        const processBtn = document.getElementById('process-btn');
+        const logOutput = document.getElementById('log-output');
+
+        let db, auth, teacherId;
+
+        const log = (message, type = 'info') => {
+            logOutput.innerHTML += `<div class="log-${type}">${new Date().toLocaleTimeString()}: ${message}</div>`;
+            logOutput.scrollTop = logOutput.scrollHeight;
+        };
+
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = loginForm.querySelector('#email').value;
+            const password = loginForm.querySelector('#password').value;
+            
+            try {
+                log(`A tentar autenticar ${email}...`, 'info');
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+
+                const userDocRef = doc(db, 'users', user.uid);
+                const userDocSnap = await getDoc(userDocRef);
+
+                if (userDocSnap.exists() && userDocSnap.data().role === 'teacher') {
+                    teacherId = user.uid;
+                    log(`Login bem-sucedido!`, 'success');
+                    loginSection.classList.add('hidden');
+                    toolSection.classList.remove('hidden');
+                    await fetchQuizzesAndQuestions();
+                } else {
+                    log("Acesso negado. Apenas professores podem usar esta ferramenta.", "error");
+                    await signOut(auth);
+                }
+            } catch (error) {
+                log(`Erro no login: ${error.message}`, "error");
+            }
+        });
+
+        async function fetchQuizzesAndQuestions() {
+            if (!db || !teacherId) return;
+            log("A buscar quizzes e questões do professor...", "info");
+            try {
+                const quizQuery = query(collection(db, 'quizzes'), where("creatorId", "==", teacherId));
+                const quizSnapshot = await getDocs(quizQuery);
+                quizSelector.innerHTML = '';
+                if (quizSnapshot.empty) {
+                    quizSelector.innerHTML = '<option>Nenhum quiz encontrado</option>';
+                } else {
+                    quizSnapshot.forEach((doc) => {
+                        const quizData = doc.data();
+                        const option = document.createElement('option');
+                        option.value = doc.id;
+                        option.textContent = quizData.title;
+                        quizSelector.appendChild(option);
+                    });
+                }
+                quizSelector.disabled = quizSnapshot.empty;
+
+                // CORREÇÃO: Busca todas as questões e filtra no cliente
+                const questionSnapshot = await getDocs(collection(db, 'questionBank'));
+                const allQuestions = questionSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const teacherQuestions = allQuestions.filter(q => q.creatorId === teacherId);
+
+                questionBankList.innerHTML = '';
+                if (teacherQuestions.length === 0) {
+                    questionBankList.innerHTML = '<p>Nenhuma questão no seu banco.</p>';
+                } else {
+                    teacherQuestions.forEach((question) => {
+                        const item = document.createElement('div');
+                        item.className = 'question-item';
+                        item.innerHTML = `
+                            <input type="checkbox" id="${question.id}" value="${question.id}">
+                            <label for="${question.id}">${question.text}</label>
+                        `;
+                        questionBankList.appendChild(item);
+                    });
+                }
+                log("Quizzes e questões carregados com sucesso!", "success");
+            } catch (error) {
+                log("Erro ao buscar dados.", "error");
+                console.error(error);
+            }
+        }
+
+        processBtn.addEventListener('click', async () => {
+            if (!db || !auth || !teacherId) {
+                log("A conexão com o Firebase falhou ou não está autenticado.", "error");
+                return;
+            }
+
+            const quizId = quizSelector.value;
+            const selectedQuestionIds = Array.from(questionBankList.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+
+            if (!quizId || selectedQuestionIds.length === 0) {
+                log("Por favor, selecione um quiz e pelo menos uma questão.", "error");
+                return;
+            }
+
+            processBtn.disabled = true;
+            log(`A adicionar ${selectedQuestionIds.length} questões ao quiz...`, "info");
+
+            try {
+                const questionsToAdd = [];
+                for (const qId of selectedQuestionIds) {
+                    const qDoc = await getDoc(doc(db, "questionBank", qId));
+                    if (qDoc.exists()) {
+                        questionsToAdd.push(qDoc.data());
+                    }
+                }
+                
+                const quizRef = doc(db, 'quizzes', quizId);
+                await updateDoc(quizRef, {
+                    questions: arrayUnion(...questionsToAdd)
+                });
+
+                log(`${questionsToAdd.length} questões adicionadas com sucesso!`, "success");
+                
+            } catch (error) {
+                log(`Erro ao adicionar questões: ${error.message}`, "error");
+                console.error(error);
+            }
+
+            processBtn.disabled = false;
+        });
+
+    </script>
+</body>
+</html>
